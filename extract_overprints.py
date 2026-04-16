@@ -87,26 +87,28 @@ import sys
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 import cv2
 import numpy as np
 from PIL import Image
 
 try:
-    import fitz
+    import pymupdf
 
+    PYMUPDF_BACKEND = pymupdf
     HAVE_PYMUPDF = True
 except Exception:
-    fitz = None
+    PYMUPDF_BACKEND = None
     HAVE_PYMUPDF = False
 
 try:
-    from pdf2image import convert_from_path
+    from pdf2image import convert_from_path as pdf2image_convert_from_path
 
+    PDF2IMAGE_CONVERTER: Optional[Callable[..., List[Image.Image]]] = pdf2image_convert_from_path
     HAVE_PDF2IMAGE = True
 except Exception:
-    convert_from_path = None
+    PDF2IMAGE_CONVERTER = None
     HAVE_PDF2IMAGE = False
 
 
@@ -517,27 +519,41 @@ def resolve_pdf_path(input_dir: Optional[Path], filename: str) -> Path:
     return path
 
 
+def _rasterize_with_pymupdf(pdf_path: Path, dpi: int) -> np.ndarray:
+    backend = PYMUPDF_BACKEND
+    if backend is None:
+        raise RuntimeError("PyMuPDF backend is not available.")
+    doc = backend.open(pdf_path)
+    try:
+        if len(doc) == 0:
+            raise ValueError(f"PDF has no pages: {pdf_path}")
+        page = doc.load_page(0)
+        scale = dpi / 72.0
+        pix = page.get_pixmap(matrix=backend.Matrix(scale, scale), alpha=False)
+        rgb = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, pix.n)
+        if pix.n == 4:
+            rgb = rgb[:, :, :3]
+        return cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+    finally:
+        doc.close()
+
+
+def _rasterize_with_pdf2image(pdf_path: Path, dpi: int) -> np.ndarray:
+    converter = PDF2IMAGE_CONVERTER
+    if converter is None:
+        raise RuntimeError("pdf2image backend is not available.")
+    images = converter(str(pdf_path), dpi=dpi, first_page=1, last_page=1, fmt="png")
+    if not images:
+        raise ValueError(f"PDF has no pages: {pdf_path}")
+    rgb = np.array(images[0].convert("RGB"))
+    return cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+
+
 def rasterize_pdf_page(pdf_path: Path, dpi: int) -> np.ndarray:
     if HAVE_PYMUPDF:
-        doc = fitz.open(pdf_path)
-        try:
-            if len(doc) == 0:
-                raise ValueError(f"PDF has no pages: {pdf_path}")
-            page = doc.load_page(0)
-            scale = dpi / 72.0
-            pix = page.get_pixmap(matrix=fitz.Matrix(scale, scale), alpha=False)
-            rgb = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, pix.n)
-            if pix.n == 4:
-                rgb = rgb[:, :, :3]
-            return cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
-        finally:
-            doc.close()
+        return _rasterize_with_pymupdf(pdf_path, dpi)
     if HAVE_PDF2IMAGE:
-        images = convert_from_path(str(pdf_path), dpi=dpi, first_page=1, last_page=1, fmt="png")
-        if not images:
-            raise ValueError(f"PDF has no pages: {pdf_path}")
-        rgb = np.array(images[0].convert("RGB"))
-        return cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+        return _rasterize_with_pdf2image(pdf_path, dpi)
     raise RuntimeError("Neither PyMuPDF nor pdf2image is available.")
 
 
@@ -581,8 +597,8 @@ def compute_canvas_bounds(
 
 
 def overlap_slices(
-    base_shape: Tuple[int, int],
-    img_shape: Tuple[int, int],
+    base_shape: Sequence[int],
+    img_shape: Sequence[int],
     x: int,
     y: int,
 ) -> Optional[Tuple[slice, slice, slice, slice]]:
