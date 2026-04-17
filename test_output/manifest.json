@@ -1,0 +1,51 @@
+{
+  "created_utc": "2026-04-17T01:40:40+00:00",
+  "input": "sample.png",
+  "output_dir": "test_output",
+  "crop": {
+    "mode": "full-image",
+    "x1": null,
+    "y1": null,
+    "x2": null,
+    "y2": null
+  },
+  "source_size": {
+    "width": 218,
+    "height": 142
+  },
+  "crop_size": {
+    "width": 218,
+    "height": 142
+  },
+  "background_mode": "transparent",
+  "save_white_preview": true,
+  "save_masks": true,
+  "config": {
+    "red_h1_max": 20,
+    "red_h2_min": 165,
+    "red_s_min": 35,
+    "red_v_min": 25,
+    "red_lab_a_min": 140,
+    "darkness_low": 0.1,
+    "darkness_high": 0.92,
+    "neutrality_low": 0.15,
+    "neutrality_high": 0.92,
+    "red_penalty_strength": 1.0,
+    "alpha_gamma": 1.0,
+    "alpha_clip_min": 0.03,
+    "binary_threshold": 0.22,
+    "purple_h_low": 118,
+    "purple_h_high": 168,
+    "purple_s_low": 0.08,
+    "purple_s_high": 0.95,
+    "purple_darkness_low": 0.08,
+    "purple_darkness_high": 0.9,
+    "purple_rb_delta_max": 0.22
+  },
+  "outputs": {
+    "transparent_png": "test_output\\extracted_overprint_transparent.png",
+    "primary_output": "test_output\\extracted_overprint_primary.png",
+    "original_crop": "test_output\\original_crop.png",
+    "comparison": "test_output\\comparison_original_vs_extracted.png"
+  }
+}
